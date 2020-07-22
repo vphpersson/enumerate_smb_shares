@@ -31,6 +31,7 @@ async def enumerate_smb_shares(
     port_number: int = 445
 ) -> Tuple[ShareInfo1, ...]:
     """
+    Enumerate the SMB shares of an SMB server.
 
     :param address: An address of an SMB server whose shares to enumerate.
     :param username: A username to be used when authenticating with the SMB server.
