@@ -1,0 +1,14 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+smb = {file = "https://github.com/vphpersson/smb/tarball/master"}
+rpc = {file = "https://github.com/vphpersson/rpc/tarball/master"}
+ms_srvs = {file = "https://github.com/vphpersson/ms_srvs/tarball/master"}
+
+[requires]
+python_version = "3.8"
