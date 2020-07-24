@@ -9,6 +9,7 @@ from json import dumps as json_dumps
 
 from smb.transport import TCPIPTransport
 from smb.v2.connection import Connection as SMBv2Connection
+from smb.v2.session import Session as SMBv2Session
 from smb.contrib.argument_parsers import SmbSingleAuthenticationArgumentParser
 from rpc.connection import Connection as RPCConnection
 from rpc.structures.context_list import ContextList, ContextElement
@@ -25,6 +26,32 @@ def default_json_serializer(obj):
 
 
 async def enumerate_smb_shares(
+    smb_connection: SMBv2Connection,
+    smb_session: SMBv2Session
+) -> Tuple[ShareInfo1, ...]:
+
+    async with smb_connection.make_smbv2_transport(session=smb_session, pipe=MS_SRVS_PIPE_NAME) as (r, w):
+        async with RPCConnection(reader=r, writer=w) as rpc_connection:
+            await rpc_connection.bind(
+                presentation_context_list=ContextList([
+                    ContextElement(context_id=0, abstract_syntax=MS_SRVS_ABSTRACT_SYNTAX)
+                ])
+            )
+
+            share_info_container = (
+                await netr_share_enum(
+                    rpc_connection=rpc_connection,
+                    request=NetrShareEnumRequest(level=1)
+                )
+            ).info_struct.share_info
+
+            if not isinstance(share_info_container, ShareInfo1Container):
+                raise ValueError('Bad share info container type.')
+
+            return share_info_container.entries
+
+
+async def pre_enumerate_smb_shares(
     address: Union[str, IPv4Address, IPv6Address],
     username: str,
     authentication_secret: Union[str, bytes],
@@ -45,25 +72,7 @@ async def enumerate_smb_shares(
         async with SMBv2Connection(tcp_ip_transport=tcp_ip_transport) as smb_connection:
             await smb_connection.negotiate()
             async with smb_connection.setup_session(username=username, authentication_secret=authentication_secret) as smb_session:
-                async with smb_connection.make_smbv2_transport(session=smb_session, pipe=MS_SRVS_PIPE_NAME) as (r, w):
-                    async with RPCConnection(reader=r, writer=w) as rpc_connection:
-                        await rpc_connection.bind(
-                            presentation_context_list=ContextList([
-                                ContextElement(context_id=0, abstract_syntax=MS_SRVS_ABSTRACT_SYNTAX)
-                            ])
-                        )
-
-                        share_info_container = (
-                            await netr_share_enum(
-                                rpc_connection=rpc_connection,
-                                request=NetrShareEnumRequest(level=1)
-                            )
-                        ).info_struct.share_info
-
-                        if not isinstance(share_info_container, ShareInfo1Container):
-                            raise ValueError('Bad share info container type.')
-
-                        return share_info_container.entries
+                return await enumerate_smb_shares(smb_connection=smb_connection, smb_session=smb_session)
 
 
 # TODO: Support multiple targets.
@@ -85,7 +94,7 @@ class EnumerateSMBShareArgumentParser(SmbSingleAuthenticationArgumentParser):
 
 async def main():
     args: ArgparseNamespace = EnumerateSMBShareArgumentParser().parse_args()
-    share_entries: Tuple[ShareInfo1, ...] = await enumerate_smb_shares(
+    share_entries: Tuple[ShareInfo1, ...] = await pre_enumerate_smb_shares(
         address=args.target_address,
         username=args.username,
         authentication_secret=args.password or bytes.fromhex(args.nt_hash)
