@@ -25,12 +25,9 @@ def default_json_serializer(obj):
         raise TypeError
 
 
-async def enumerate_smb_shares(
-    smb_connection: SMBv2Connection,
-    smb_session: SMBv2Session
-) -> Tuple[ShareInfo1, ...]:
+async def enumerate_smb_shares(smb_session: SMBv2Session) -> Tuple[ShareInfo1, ...]:
 
-    async with smb_connection.make_smbv2_transport(session=smb_session, pipe=MS_SRVS_PIPE_NAME) as (r, w):
+    async with smb_session.make_smbv2_transport(pipe=MS_SRVS_PIPE_NAME) as (r, w):
         async with RPCConnection(reader=r, writer=w) as rpc_connection:
             await rpc_connection.bind(
                 presentation_context_list=ContextList([
@@ -72,7 +69,7 @@ async def pre_enumerate_smb_shares(
         async with SMBv2Connection(tcp_ip_transport=tcp_ip_transport) as smb_connection:
             await smb_connection.negotiate()
             async with smb_connection.setup_session(username=username, authentication_secret=authentication_secret) as smb_session:
-                return await enumerate_smb_shares(smb_connection=smb_connection, smb_session=smb_session)
+                return await enumerate_smb_shares(smb_session=smb_session)
 
 
 # TODO: Support multiple targets.
