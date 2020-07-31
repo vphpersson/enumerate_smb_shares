@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 from asyncio import run as asyncio_run, gather as asyncio_gather
-from typing import List, Union, Callable, Optional, Collection
+from typing import List, Union, Callable, Optional, Collection, Pattern
 from argparse import Action as ArgparseAction, ArgumentParser, Namespace as ArgparseNamespace
 from pathlib import PureWindowsPath
-from re import compile as re_compile, Pattern as RePattern, error as re_error
+from re import compile as re_compile, error as re_error
 from ipaddress import IPv4Address, IPv6Address
 from sys import stderr
 from logging import getLogger, WARNING, StreamHandler
@@ -24,12 +24,11 @@ LOG = getLogger(__name__)
 
 
 async def enumerate_smb_share_files(
-    smb_connection: SMBv2Connection,
     smb_session: Session,
     tree_id: int,
     root_path: Union[str, PureWindowsPath] = '',
     num_max_concurrent: int = 10,
-    per_file_callback: Optional[Callable[[PureWindowsPath, FileInformation, SMBv2Connection, Session, int], bool]] = None
+    per_file_callback: Optional[Callable[[PureWindowsPath, FileInformation, Session, int], bool]] = None
 ) -> None:
     """
     Enumerate files in an SMB share.
@@ -38,7 +37,6 @@ async def enumerate_smb_share_files(
     `per_file_callback` allows one to inspect each enumerated file as they are encountered and -- in the case of
     directories -- make a decision whether to enumerate it.
 
-    :param smb_connection: An SMB connection with access to the share whose files are to be enumerated.
     :param smb_session: An SMB session with access to the share whose files are to be enumerated.
     :param tree_id: The tree id of the share whose files are to be enumerated.
     :param root_path: The root path from which to enumerate files.
@@ -55,13 +53,12 @@ async def enumerate_smb_share_files(
         :return: A list of the path's file and directory information entries.
         """
 
-        async with smb_connection.create_dir(path=path, session=smb_session, tree_id=tree_id) as create_response:
-            return await smb_connection.query_directory(
+        async with smb_session.create_dir(path=path, tree_id=tree_id) as create_response:
+            return await smb_session.query_directory(
                 file_id=create_response.file_id,
                 file_information_class=FileInformationClass.FileIdFullDirectoryInformation,
                 query_directory_flag=QueryDirectoryFlag(),
                 file_name_pattern='*',
-                session=smb_session,
                 tree_id=tree_id
             )
 
@@ -101,7 +98,6 @@ async def enumerate_smb_share_files(
                 should_scan: bool = per_file_callback(
                     entry_path,
                     entry.file_information,
-                    smb_connection,
                     smb_session,
                     tree_id
                 )
@@ -116,7 +112,7 @@ async def pre_enumerate_smb_share_files(
     authentication_secret: Union[str, bytes],
     share_names: Collection[str],
     root_path: Union[str, PureWindowsPath] = '',
-    path_pattern: RePattern = re_compile(pattern='.*'),
+    path_pattern: Pattern[str] = re_compile(pattern='.*'),
     port_number: int = 445
 ):
 
@@ -128,16 +124,13 @@ async def pre_enumerate_smb_share_files(
                 if len(share_names) == 0:
                     share_names: List[str] = [
                         share_info_1_entry.netname
-                        for share_info_1_entry in await enumerate_smb_shares(
-                            smb_connection=smb_connection,
-                            smb_session=smb_session
-                        )
+                        for share_info_1_entry in await enumerate_smb_shares(smb_session=smb_session)
                         if isinstance(share_info_1_entry.share_type, DiskTree)
                     ]
 
                 for share_name in share_names:
                     try:
-                        async with smb_connection.tree_connect(share_name=share_name, session=smb_session) as (tree_id, _):
+                        async with smb_session.tree_connect(share_name=share_name) as (tree_id, _):
 
                             def print_paths(entry_path: PureWindowsPath, *_, **__) -> bool:
                                 if path_pattern.search(string=str(entry_path)):
@@ -145,7 +138,6 @@ async def pre_enumerate_smb_share_files(
                                 return True
 
                             await enumerate_smb_share_files(
-                                smb_connection=smb_connection,
                                 smb_session=smb_session,
                                 tree_id=tree_id,
                                 root_path=root_path,
@@ -159,7 +151,7 @@ class _ParsePattern(ArgparseAction):
     def __call__(self, parser: ArgumentParser, namespace: ArgparseNamespace, pattern: str, option_string: str = None):
 
         try:
-            re_pattern: RePattern = re_compile(pattern=pattern)
+            re_pattern: Pattern[str] = re_compile(pattern=pattern)
             setattr(namespace, self.dest, re_pattern)
         except re_error:
             parser.error(f'Bad regex pattern: {pattern}')
