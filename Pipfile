@@ -10,6 +10,7 @@ smb = {file = "https://github.com/vphpersson/smb/tarball/master"}
 rpc = {file = "https://github.com/vphpersson/rpc/tarball/master"}
 ms_srvs = {file = "https://github.com/vphpersson/ms_srvs/tarball/master"}
 msdsalgs = {file = "https://github.com/vphpersson/msdsalgs/tarball/master"}
+pyutils = {file = "https://github.com/vphpersson/pyutils/tarball/master"}
 
 [requires]
 python_version = "3.8"

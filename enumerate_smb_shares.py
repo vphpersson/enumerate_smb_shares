@@ -16,6 +16,7 @@ from rpc.structures.context_list import ContextList, ContextElement
 from ms_srvs import MS_SRVS_ABSTRACT_SYNTAX, MS_SRVS_PIPE_NAME
 from ms_srvs.operations.netr_share_enum import netr_share_enum, NetrShareEnumRequest
 from ms_srvs.structures.share_info_container import ShareInfo1Container, ShareInfo1
+from pyutils.my_string import text_align_delimiter
 
 
 def default_json_serializer(obj):
@@ -101,12 +102,15 @@ async def main():
         print(json_dumps(share_entries, default=default_json_serializer))
     else:
         print(
-            '\n\n'.join([
-                f'Name: {entry.netname}\n'
-                f'Type: {entry.share_type}\n'
-                f'Remark: {entry.remark}'
-                for entry in share_entries
-            ])
+            text_align_delimiter(
+                text='\n\n'.join([
+                    f'Name: {entry.netname}\n'
+                    f'Type: {entry.share_type}\n'
+                    f'Remark: {entry.remark}'
+                    for entry in share_entries
+                ]),
+                delimiter=': '
+            )
         )
 
 
